@@ -54,6 +54,21 @@ export function Icon({ name }: { name: IconName }) {
           <path {...common} d="M21 13.5v3" />
         </svg>
       );
+    case 'edit':
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path {...common} d="m4 20 4.2-1 9.6-9.6a2.2 2.2 0 0 0-3.1-3.1L5.1 15.9 4 20Z" />
+          <path {...common} d="m13.5 5.5 5 5" />
+        </svg>
+      );
+    case 'external':
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path {...common} d="M14 5h5v5" />
+          <path {...common} d="M10 14 19 5" />
+          <path {...common} d="M19 13v4a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4" />
+        </svg>
+      );
     case 'logout':
       return (
         <svg viewBox="0 0 24 24" aria-hidden="true">

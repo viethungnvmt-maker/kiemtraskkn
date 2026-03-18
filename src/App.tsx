@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import './App.css';
 import {
   criteria,
@@ -168,8 +168,584 @@ function BarChart() {
   );
 }
 
+type ApiSettings = {
+  apiKey: string;
+  model: string;
+};
+
+type ApiModelOption = {
+  id: string;
+  name: string;
+  description: string;
+  badge?: {
+    label: string;
+    tone: 'success' | 'warning';
+  };
+};
+
+const API_STORAGE_KEY = 'skkn-api-settings';
+const defaultApiModel = 'gemini-2-5-flash-lite';
+const apiModelOptions: ApiModelOption[] = [
+  {
+    id: 'gemini-2-5-flash',
+    name: 'Gemini 2.5 Flash',
+    description: 'Mới, mạnh mẽ hơn',
+    badge: { label: 'Mặc định', tone: 'success' },
+  },
+  {
+    id: 'gemini-3-flash',
+    name: 'Gemini 3 Flash',
+    description: 'Nhanh và hiệu quả',
+  },
+  {
+    id: 'gemini-2-5-flash-lite',
+    name: 'Gemini 2.5 Flash Lite',
+    description: 'Ổn định và đáng tin cậy',
+  },
+  {
+    id: 'gemini-2-5-pro',
+    name: 'Gemini 2.5 Pro',
+    description: 'Mạnh mẽ, chi tiết, chính xác cao',
+    badge: { label: 'Trả phí', tone: 'warning' },
+  },
+];
+
+const acceptedFileExtensions = ['pdf', 'docx'];
+const assessmentStages = [
+  {
+    threshold: 24,
+    title: 'Đang tiếp nhận và chuẩn hóa dữ liệu đầu vào.',
+    detail: 'Hệ thống đang đọc cấu trúc tài liệu, bóc tách nội dung và nhận diện bố cục SKKN.',
+  },
+  {
+    threshold: 49,
+    title: 'Đang đối chiếu với cơ sở dữ liệu và kiểm tra trùng lặp.',
+    detail: 'Hệ thống đang so khớp nguồn nội bộ, internet và các kho tư liệu giáo dục.',
+  },
+  {
+    threshold: 74,
+    title: 'Đang rà soát lỗi ngữ pháp, chính tả và tính logic.',
+    detail: 'AI đang kiểm tra diễn đạt, luận điểm, minh chứng và độ mạch lạc của nội dung.',
+  },
+  {
+    threshold: 94,
+    title: 'Đang tính điểm các tiêu chí thẩm định.',
+    detail: 'Hệ thống đang chấm các nhóm tính mới, khả thi, khoa học và hình thức.',
+  },
+  {
+    threshold: 100,
+    title: 'Đang tổng hợp điểm số và hoàn thiện báo cáo.',
+    detail: 'Chuẩn bị hiển thị bảng kết quả thẩm định chi tiết cho SKKN của bạn.',
+  },
+] as const;
+
+function isAllowedUpload(file: File) {
+  const extension = file.name.split('.').pop()?.toLowerCase();
+  return Boolean(extension && acceptedFileExtensions.includes(extension));
+}
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function maskApiKey(value: string) {
+  if (!value) {
+    return 'Chưa có API key';
+  }
+
+  if (value.length <= 8) {
+    return '•'.repeat(value.length);
+  }
+
+  return `${value.slice(0, 4)}${'•'.repeat(Math.max(12, value.length - 8))}${value.slice(-4)}`;
+}
+
+function getAssessmentStage(progress: number) {
+  return assessmentStages.find((stage) => progress <= stage.threshold) ?? assessmentStages[assessmentStages.length - 1];
+}
+
+function GuideModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="guide-overlay" role="presentation" onClick={onClose}>
+      <section
+        className="guide-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="guide-modal-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="guide-modal-head">
+          <div className="guide-modal-brand">
+            <div className="guide-brand-mark">
+              <Icon name="book" />
+            </div>
+            <div>
+              <h2 id="guide-modal-title">Hướng dẫn sử dụng</h2>
+              <p>Trợ lý Việt Hùng v1.4</p>
+            </div>
+          </div>
+
+          <button type="button" className="guide-close" onClick={onClose} aria-label="Đóng hướng dẫn">
+            ×
+          </button>
+        </div>
+
+        <div className="guide-modal-body">
+          <article className="guide-card">
+            <span className="guide-step-badge step-blue">1</span>
+            <div className="guide-card-content">
+              <h3>Nhập thông tin SKKN</h3>
+              <ul>
+                <li>
+                  Điền <strong>Tên đề tài</strong> và chọn <strong>Lĩnh vực</strong>
+                </li>
+                <li>
+                  Nhập nội dung SKKN hoặc tải file <strong>Word/PDF</strong>
+                </li>
+                <li>
+                  Sau đó bấm <strong>&quot;Phân tích SKKN&quot;</strong>
+                </li>
+              </ul>
+            </div>
+          </article>
+
+          <article className="guide-card">
+            <span className="guide-step-badge step-green">2</span>
+            <div className="guide-card-content">
+              <h3>Đọc kết quả phân tích</h3>
+
+              <div className="guide-block">
+                <p className="guide-block-title">Điểm số tổng quan (100 điểm):</p>
+                <ul className="guide-detail-list">
+                  <li>
+                    <strong>Tính mới (30đ):</strong> Sáng tạo, độc đáo của giải pháp
+                  </li>
+                  <li>
+                    <strong>Khả thi (40đ):</strong> Khả năng áp dụng thực tế
+                  </li>
+                  <li>
+                    <strong>Khoa học (20đ):</strong> Cơ sở lý luận, số liệu minh chứng
+                  </li>
+                  <li>
+                    <strong>Hình thức (10đ):</strong> Trình bày, chính tả, ngữ pháp
+                  </li>
+                </ul>
+              </div>
+
+              <div className="guide-block">
+                <p className="guide-block-title">Nguy cơ đạo văn:</p>
+                <ul className="guide-detail-list">
+                  <li>
+                    <strong className="guide-accent guide-accent-good">Thấp:</strong> Nội dung sáng tạo, ít trùng lặp
+                  </li>
+                  <li>
+                    <strong className="guide-accent guide-accent-warn">Trung bình:</strong> Có một số đoạn cần viết lại
+                  </li>
+                  <li>
+                    <strong className="guide-accent guide-accent-danger">Cao/Rất cao:</strong> Cần viết lại nhiều đoạn
+                  </li>
+                </ul>
+              </div>
+
+              <div className="guide-block">
+                <p className="guide-block-title">Các mục phân tích:</p>
+                <ul className="guide-detail-list">
+                  <li>
+                    <strong>Lỗi chính tả:</strong> Danh sách lỗi cần sửa
+                  </li>
+                  <li>
+                    <strong>Đoạn nghi đạo văn:</strong> Các đoạn giống nguồn khác
+                  </li>
+                  <li>
+                    <strong>Kế hoạch phát triển:</strong> Gợi ý cải thiện SKKN
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </article>
+
+          <article className="guide-card">
+            <span className="guide-step-badge step-purple">3</span>
+            <div className="guide-card-content">
+              <h3>Tự động sửa SKKN</h3>
+              <ul>
+                <li>
+                  Bấm <strong>&quot;Tự động Sửa SKKN&quot;</strong> để AI tự sửa lỗi
+                </li>
+                <li>
+                  Xem preview với chữ đỏ = đã sửa
+                </li>
+                <li>
+                  <strong>&quot;Xuất Word (Giữ gốc)&quot;</strong>: Giữ nguyên format, hình ảnh, công thức
+                </li>
+                <li>
+                  <strong>&quot;Sao chép&quot;</strong>: Copy HTML để dán vào Word
+                </li>
+              </ul>
+            </div>
+          </article>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ApiKeyModal({
+  open,
+  settings,
+  onClose,
+  onSave,
+}: {
+  open: boolean;
+  settings: ApiSettings;
+  onClose: () => void;
+  onSave: (nextSettings: ApiSettings) => void;
+}) {
+  const [draftKey, setDraftKey] = useState(settings.apiKey);
+  const [selectedModel, setSelectedModel] = useState(settings.model);
+  const [showKey, setShowKey] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    setDraftKey(settings.apiKey);
+    setSelectedModel(settings.model || defaultApiModel);
+    setShowKey(false);
+    setSaveMessage('');
+  }, [open, settings.apiKey, settings.model]);
+
+  if (!open) {
+    return null;
+  }
+
+  const normalizedKey = draftKey.trim();
+  const hasApiKey = normalizedKey.length > 0;
+
+  const handleSave = () => {
+    if (!hasApiKey) {
+      return;
+    }
+
+    onSave({
+      apiKey: normalizedKey,
+      model: selectedModel,
+    });
+    setSaveMessage('Đã lưu cấu hình API key trên trình duyệt này.');
+  };
+
+  return (
+    <div className="api-overlay" role="presentation" onClick={onClose}>
+      <section
+        className="api-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="api-modal-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="api-modal-head">
+          <div className="api-modal-brand">
+            <div className="api-brand-mark">
+              <Icon name="key" />
+            </div>
+            <div>
+              <h2 id="api-modal-title">Cài đặt API Key</h2>
+              <p>{settings.apiKey ? 'Đã có API Key' : 'Chưa có API Key'}</p>
+            </div>
+          </div>
+
+          <button type="button" className="guide-close" onClick={onClose} aria-label="Đóng cài đặt API">
+            ×
+          </button>
+        </div>
+
+        <div className="api-modal-body">
+          <label className="api-field">
+            <span>Google Gemini API Key</span>
+            <div className="api-key-input-shell">
+              <span className="api-key-input-icon">
+                <Icon name="edit" />
+              </span>
+              <input
+                value={draftKey}
+                onChange={(event) => {
+                  setDraftKey(event.target.value);
+                  setSaveMessage('');
+                }}
+                placeholder="Nhập Key riêng"
+                spellCheck={false}
+                autoComplete="off"
+              />
+            </div>
+          </label>
+
+          <div className="api-key-preview" aria-live="polite">
+            <span className={!hasApiKey ? 'is-empty' : ''}>{showKey ? normalizedKey : maskApiKey(normalizedKey)}</span>
+            <button type="button" onClick={() => setShowKey((current) => !current)} disabled={!hasApiKey}>
+              {showKey ? 'Ẩn' : 'Hiện'}
+            </button>
+          </div>
+
+          <section className="api-model-section">
+            <p className="api-section-title">Chọn Model AI</p>
+            <div className="api-model-list" role="radiogroup" aria-label="Chọn model Gemini">
+              {apiModelOptions.map((option) => {
+                const isSelected = selectedModel === option.id;
+
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={isSelected}
+                    className={`api-model-card ${isSelected ? 'is-selected' : ''}`}
+                    onClick={() => {
+                      setSelectedModel(option.id);
+                      setSaveMessage('');
+                    }}
+                  >
+                    <span className={`api-model-radio ${isSelected ? 'is-selected' : ''}`} aria-hidden="true">
+                      {isSelected ? <Icon name="check" /> : null}
+                    </span>
+                    <span className="api-model-copy">
+                      <span className="api-model-headline">
+                        <strong>{option.name}</strong>
+                        {option.badge ? (
+                          <span className={`api-model-badge badge-${option.badge.tone}`}>{option.badge.label}</span>
+                        ) : null}
+                      </span>
+                      <span>{option.description}</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="api-help-card">
+            <p className="api-help-title">Hướng dẫn lấy API Key:</p>
+            <div className="api-help-links">
+              <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">
+                <Icon name="external" />
+                Lấy API Key miễn phí tại Google AI Studio
+              </a>
+              <a href="https://ai.google.dev/gemini-api/docs/api-key" target="_blank" rel="noreferrer">
+                <Icon name="external" />
+                Xem hướng dẫn chi tiết
+              </a>
+            </div>
+          </section>
+
+          <div className="api-modal-footer">
+            <p className="api-save-note">{saveMessage || 'API key được lưu cục bộ trên trình duyệt của bạn.'}</p>
+            <button type="button" className="api-save-button" onClick={handleSave} disabled={!hasApiKey}>
+              Lưu cấu hình
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function AssessmentScreen({
+  progress,
+  fileName,
+}: {
+  progress: number;
+  fileName?: string;
+}) {
+  const normalizedProgress = Math.round(progress);
+  const stage = getAssessmentStage(normalizedProgress);
+  const radius = 46;
+  const circumference = 2 * Math.PI * radius;
+  const dash = (normalizedProgress / 100) * circumference;
+
+  return (
+    <section className="assessment-shell" aria-live="polite">
+      <div className="assessment-content">
+        <div className="assessment-ring">
+          <svg viewBox="0 0 120 120" className="assessment-ring-chart" aria-hidden="true">
+            <circle cx="60" cy="60" r={radius} className="assessment-ring-track" />
+            <circle
+              cx="60"
+              cy="60"
+              r={radius}
+              className="assessment-ring-progress"
+              style={{ strokeDasharray: `${dash} ${circumference}` }}
+            />
+          </svg>
+          <strong>{normalizedProgress}%</strong>
+        </div>
+
+        <div className="assessment-copy">
+          <h2>Đang thẩm định SKKN...</h2>
+          <p>{stage.title}</p>
+          {fileName ? <span className="assessment-file">Tài liệu đang xử lý: {fileName}</span> : null}
+        </div>
+
+        <div className="assessment-progress-panel">
+          <div className="assessment-progress-head">
+            <strong>Tiến độ phân tích</strong>
+            <span>{normalizedProgress}%</span>
+          </div>
+          <div className="assessment-progress-track">
+            <div className="assessment-progress-fill" style={{ width: `${normalizedProgress}%` }} />
+          </div>
+          <p className="assessment-progress-note">{stage.detail}</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function App() {
   const [contentMode, setContentMode] = useState<'upload' | 'text'>('upload');
+  const [activeModal, setActiveModal] = useState<'guide' | 'api' | null>(null);
+  const [apiSettings, setApiSettings] = useState<ApiSettings>({
+    apiKey: '',
+    model: defaultApiModel,
+  });
+  const [isAssessing, setIsAssessing] = useState(false);
+  const [assessmentProgress, setAssessmentProgress] = useState(0);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [uploadError, setUploadError] = useState('');
+  const [isDragActive, setIsDragActive] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const resultsHeroRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    try {
+      const savedSettings = window.localStorage.getItem(API_STORAGE_KEY);
+
+      if (!savedSettings) {
+        return;
+      }
+
+      const parsedSettings = JSON.parse(savedSettings) as Partial<ApiSettings>;
+      const nextModel = apiModelOptions.some((option) => option.id === parsedSettings.model)
+        ? parsedSettings.model!
+        : defaultApiModel;
+
+      setApiSettings({
+        apiKey: typeof parsedSettings.apiKey === 'string' ? parsedSettings.apiKey : '',
+        model: nextModel,
+      });
+    } catch {
+      setApiSettings({
+        apiKey: '',
+        model: defaultApiModel,
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!activeModal) {
+      return undefined;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setActiveModal(null);
+      }
+    };
+
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [activeModal]);
+
+  useEffect(() => {
+    if (!isAssessing) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setAssessmentProgress((current) => {
+        if (current >= 100) {
+          return 100;
+        }
+
+        const step = current < 24 ? 4 : current < 48 ? 3 : current < 74 ? 2 : current < 94 ? 1 : 1;
+        return Math.min(100, current + step);
+      });
+    }, 170);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [isAssessing]);
+
+  useEffect(() => {
+    if (!isAssessing || assessmentProgress < 100) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setIsAssessing(false);
+      window.requestAnimationFrame(() => {
+        resultsHeroRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }, 700);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [assessmentProgress, isAssessing]);
+
+  const handleSaveApiSettings = (nextSettings: ApiSettings) => {
+    setApiSettings(nextSettings);
+
+    try {
+      window.localStorage.setItem(API_STORAGE_KEY, JSON.stringify(nextSettings));
+    } catch {
+      // Ignore storage errors in demo mode.
+    }
+  };
+
+  const handleFileSelection = (file: File | null) => {
+    if (!file) {
+      return;
+    }
+
+    if (!isAllowedUpload(file)) {
+      setUploadError('Chỉ hỗ trợ file PDF hoặc Word (.docx).');
+      return;
+    }
+
+    setUploadedFile(file);
+    setUploadError('');
+  };
+
+  const handleStartAssessment = () => {
+    if (contentMode === 'upload' && !uploadedFile) {
+      setUploadError('Vui lòng chọn file PDF hoặc Word (.docx) trước khi thẩm định.');
+      return;
+    }
+
+    setActiveModal(null);
+    setAssessmentProgress(0);
+    setIsAssessing(true);
+  };
 
   return (
     <div className="dashboard">
@@ -183,7 +759,7 @@ export default function App() {
             <Icon name="shield" />
           </div>
           <div>
-            <strong>Trợ Lý SKKN</strong>
+            <strong>Trợ lý Việt Hùng</strong>
             <span>Trợ lý thẩm định SKKN</span>
           </div>
         </div>
@@ -196,12 +772,24 @@ export default function App() {
         </div>
 
         <nav className="topnav" aria-label="Điều hướng chính">
-          {navItems.map((item) => (
-            <a key={item.label} href="/" onClick={(event) => event.preventDefault()}>
-              <Icon name={item.icon} />
-              {item.label}
-            </a>
-          ))}
+          {navItems.map((item) =>
+            item.icon === 'book' || item.icon === 'key' ? (
+              <button
+                key={item.label}
+                type="button"
+                className="topnav-button"
+                onClick={() => setActiveModal(item.icon === 'book' ? 'guide' : 'api')}
+              >
+                <Icon name={item.icon} />
+                {item.label}
+              </button>
+            ) : (
+              <a key={item.label} href="/" onClick={(event) => event.preventDefault()}>
+                <Icon name={item.icon} />
+                {item.label}
+              </a>
+            ),
+          )}
           <span className="version-pill">v1.4</span>
           <a href="/" className="logout-link" onClick={(event) => event.preventDefault()}>
             <Icon name="logout" />
@@ -211,6 +799,13 @@ export default function App() {
       </header>
 
       <main className="page-shell">
+        {isAssessing ? (
+          <AssessmentScreen
+            progress={assessmentProgress}
+            fileName={contentMode === 'upload' ? uploadedFile?.name : undefined}
+          />
+        ) : (
+          <>
         <section className="panel input-panel">
           <div className="panel-head hero-head">
             <div>
@@ -286,17 +881,97 @@ export default function App() {
               </div>
 
               {contentMode === 'upload' ? (
-                <div className="dropzone">
-                  <div className="drop-icon">
-                    <Icon name="upload" />
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    className="file-input-hidden"
+                    onChange={(event) => {
+                      handleFileSelection(event.target.files?.[0] ?? null);
+                      event.target.value = '';
+                    }}
+                  />
+
+                  <div
+                    className={`dropzone ${isDragActive ? 'is-dragging' : ''} ${uploadedFile ? 'has-file' : ''}`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => fileInputRef.current?.click()}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        fileInputRef.current?.click();
+                      }
+                    }}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      setIsDragActive(true);
+                    }}
+                    onDragLeave={(event) => {
+                      event.preventDefault();
+                      if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                        return;
+                      }
+
+                      setIsDragActive(false);
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      setIsDragActive(false);
+                      handleFileSelection(event.dataTransfer.files?.[0] ?? null);
+                    }}
+                  >
+                    <div className="drop-icon">
+                      <Icon name="upload" />
+                    </div>
+
+                    {uploadedFile ? (
+                      <div className="uploaded-file-card">
+                        <strong>{uploadedFile.name}</strong>
+                        <p>
+                          {formatFileSize(uploadedFile.size)} · Cập nhật lúc{' '}
+                          {new Date(uploadedFile.lastModified).toLocaleDateString('vi-VN')}
+                        </p>
+                        <div className="uploaded-file-actions">
+                          <button
+                            type="button"
+                            className="uploaded-file-button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              fileInputRef.current?.click();
+                            }}
+                          >
+                            Chọn file khác
+                          </button>
+                          <button
+                            type="button"
+                            className="uploaded-file-button is-ghost"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setUploadedFile(null);
+                              setUploadError('');
+                            }}
+                          >
+                            Bỏ file
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <strong>Kéo thả file hoặc click để chọn</strong>
+                        <p>Hỗ trợ file `.pdf` và `.docx`</p>
+                      </>
+                    )}
+
+                    <div className="file-badges">
+                      <span>Word (.docx)</span>
+                      <span>PDF</span>
+                    </div>
                   </div>
-                  <strong>Kéo thả file hoặc click để chọn</strong>
-                  <p>Hỗ trợ file `.pdf` và `.docx`</p>
-                  <div className="file-badges">
-                    <span>Word (.docx)</span>
-                    <span>PDF</span>
-                  </div>
-                </div>
+
+                  {uploadError ? <p className="upload-error">{uploadError}</p> : null}
+                </>
               ) : (
                 <textarea
                   className="text-input"
@@ -307,7 +982,7 @@ export default function App() {
           </div>
 
           <div className="input-footer">
-            <button className="primary-cta" type="button">
+            <button className="primary-cta" type="button" onClick={handleStartAssessment}>
               <Icon name="spark" />
               Kiểm tra ngay
             </button>
@@ -318,7 +993,7 @@ export default function App() {
           </div>
         </section>
 
-        <section className="panel result-hero">
+        <section ref={resultsHeroRef} className="panel result-hero">
           <div className="result-hero-head">
             <div>
               <p className="panel-kicker">Kết quả Thẩm định SKKN</p>
@@ -538,6 +1213,9 @@ export default function App() {
           </div>
         </section>
 
+          </>
+        )}
+
         <footer className="footer-banner panel">
           <p>Đăng ký khóa học thực chiến viết SKKN, tạo app dạy học, tạo mô phỏng trực quan</p>
           <strong>Chỉ với 1 câu lệnh</strong>
@@ -547,8 +1225,33 @@ export default function App() {
           <small>
             Mọi thông tin vui lòng liên hệ: Facebook <span>tranhoaithanhvicko</span> · Zalo <span>0348296773</span>
           </small>
+
+          <div className="footer-promo-card">
+            <p className="footer-promo-title">ĐĂNG KÝ KHÓA HỌC THỰC CHIẾN VIẾT SKKN, TẠO APP DẠY HỌC, TẠO MÔ PHỎNG TRỰC QUAN</p>
+            <strong className="footer-promo-accent">CHỈ VỚI 1 CÂU LỆNH</strong>
+            <button type="button" className="footer-button footer-button-large">
+              ĐĂNG KÝ NGAY
+            </button>
+          </div>
+
+          <div className="footer-contact">
+            <p>Mọi thông tin vui lòng liên hệ:</p>
+            <small className="footer-contact-links">
+              <strong>Facebook:</strong> <span>@viethungnvt</span>
+              <span className="footer-contact-divider">•</span>
+              <strong>Zalo:</strong> <span>036.38.31.337</span>
+            </small>
+          </div>
         </footer>
       </main>
+
+      <GuideModal open={activeModal === 'guide'} onClose={() => setActiveModal(null)} />
+      <ApiKeyModal
+        open={activeModal === 'api'}
+        settings={apiSettings}
+        onClose={() => setActiveModal(null)}
+        onSave={handleSaveApiSettings}
+      />
     </div>
   );
 }

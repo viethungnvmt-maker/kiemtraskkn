@@ -6,6 +6,8 @@ export type IconName =
   | 'compare'
   | 'book'
   | 'key'
+  | 'edit'
+  | 'external'
   | 'logout'
   | 'search'
   | 'upload'
