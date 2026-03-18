@@ -986,10 +986,6 @@ export default function App() {
               <Icon name="spark" />
               Kiểm tra ngay
             </button>
-            <p>
-              Front-end này đang dùng dữ liệu mẫu để trình diễn UI. Phần gọi API phân tích thật có thể nối
-              sau vào các nút hành động.
-            </p>
           </div>
         </section>
 
