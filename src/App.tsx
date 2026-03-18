@@ -620,8 +620,10 @@ export default function App() {
     apiKey: '',
     model: defaultApiModel,
   });
+  const [hasAssessmentResult, setHasAssessmentResult] = useState(false);
   const [isAssessing, setIsAssessing] = useState(false);
   const [assessmentProgress, setAssessmentProgress] = useState(0);
+  const [assessmentError, setAssessmentError] = useState('');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [uploadError, setUploadError] = useState('');
   const [isDragActive, setIsDragActive] = useState(false);
@@ -701,6 +703,7 @@ export default function App() {
     }
 
     const timeoutId = window.setTimeout(() => {
+      setHasAssessmentResult(true);
       setIsAssessing(false);
       window.requestAnimationFrame(() => {
         resultsHeroRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -714,6 +717,7 @@ export default function App() {
 
   const handleSaveApiSettings = (nextSettings: ApiSettings) => {
     setApiSettings(nextSettings);
+    setAssessmentError('');
 
     try {
       window.localStorage.setItem(API_STORAGE_KEY, JSON.stringify(nextSettings));
@@ -737,12 +741,17 @@ export default function App() {
   };
 
   const handleStartAssessment = () => {
-    if (contentMode === 'upload' && !uploadedFile) {
-      setUploadError('Vui lòng chọn file PDF hoặc Word (.docx) trước khi thẩm định.');
+    setUploadError('');
+    setAssessmentError('');
+
+    if (!apiSettings.apiKey.trim()) {
+      setAssessmentError('Vui lòng nhập API Key trước khi kiểm tra.');
+      setActiveModal('api');
       return;
     }
 
     setActiveModal(null);
+    setHasAssessmentResult(false);
     setAssessmentProgress(0);
     setIsAssessing(true);
   };
@@ -986,9 +995,12 @@ export default function App() {
               <Icon name="spark" />
               Kiểm tra ngay
             </button>
+            {assessmentError ? <p className="input-footer-alert">{assessmentError}</p> : null}
           </div>
         </section>
 
+        {hasAssessmentResult ? (
+          <>
         <section ref={resultsHeroRef} className="panel result-hero">
           <div className="result-hero-head">
             <div>
@@ -1208,6 +1220,8 @@ export default function App() {
             </button>
           </div>
         </section>
+          </>
+        ) : null}
 
           </>
         )}
