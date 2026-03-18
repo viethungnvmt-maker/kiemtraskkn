@@ -848,8 +848,8 @@ export default function App() {
               <span>Mục tiêu thi đạt giải</span>
               <select defaultValue="Cấp Trường">
                 <option>Cấp Trường</option>
-                <option>Cấp Huyện</option>
-                <option>Cấp Tỉnh</option>
+                <option>Cấp Xã/Phường</option>
+                <option>Cấp Tỉnh/Thành phố</option>
               </select>
             </label>
 
@@ -1237,7 +1237,10 @@ export default function App() {
           <div className="footer-contact">
             <p>Mọi thông tin vui lòng liên hệ:</p>
             <small className="footer-contact-links">
-              <strong>Facebook:</strong> <span>@viethungnvt</span>
+              <strong>Facebook:</strong>{' '}
+              <a href="https://fb.com/viethungnvmt" target="_blank" rel="noreferrer">
+                fb.com/viethungnvmt
+              </a>
               <span className="footer-contact-divider">•</span>
               <strong>Zalo:</strong> <span>036.38.31.337</span>
             </small>

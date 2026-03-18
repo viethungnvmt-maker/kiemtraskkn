@@ -1707,9 +1707,18 @@ svg {
   font-size: 0.98rem;
 }
 
+.footer-contact-links a,
 .footer-contact-links span {
   color: #6fb0ff;
   font-weight: 700;
+}
+
+.footer-contact-links a {
+  text-decoration: none;
+}
+
+.footer-contact-links a:hover {
+  color: #8bc1ff;
 }
 
 .footer-contact-divider {
