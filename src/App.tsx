@@ -446,6 +446,7 @@ function ApiKeyModal({
       model: selectedModel,
     });
     setSaveMessage('Đã lưu cấu hình API key trên trình duyệt này.');
+    onClose();
   };
 
   return (
