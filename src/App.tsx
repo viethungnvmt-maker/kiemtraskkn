@@ -293,7 +293,7 @@ function GuideModal({ open, onClose }: { open: boolean; onClose: () => void }) {
             </div>
             <div>
               <h2 id="guide-modal-title">Hướng dẫn sử dụng</h2>
-              <p>Trợ lý Việt Hùng v1.4</p>
+              <p>Trợ lý Việt Hùng v1.5</p>
             </div>
           </div>
 
@@ -550,13 +550,13 @@ function ApiKeyModal({
               </a>
             </div>
           </section>
+        </div>
 
-          <div className="api-modal-footer">
-            <p className="api-save-note">{saveMessage || 'API key được lưu cục bộ trên trình duyệt của bạn.'}</p>
-            <button type="button" className="api-save-button" onClick={handleSave} disabled={!hasApiKey}>
-              Lưu cấu hình
-            </button>
-          </div>
+        <div className="api-modal-footer">
+          <p className="api-save-note">{saveMessage || 'API key được lưu cục bộ trên trình duyệt của bạn.'}</p>
+          <button type="button" className="api-save-button" onClick={handleSave} disabled={!hasApiKey}>
+            Lưu cấu hình
+          </button>
         </div>
       </section>
     </div>
@@ -800,7 +800,7 @@ export default function App() {
               </a>
             ),
           )}
-          <span className="version-pill">v1.4</span>
+          <span className="version-pill">v1.5</span>
           <a href="/" className="logout-link" onClick={(event) => event.preventDefault()}>
             <Icon name="logout" />
             Đăng xuất
